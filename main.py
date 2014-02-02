@@ -75,10 +75,12 @@ def add_event(buf, ev_time, ev_start, ev_length, amp=0.5, pan=0.5):
     ev_end = np.minimum(ev_start+ev_length,len(faudio))
     # Generate a Hanning window
     window = sig.hann(ev_end-ev_start)
+    # Generate event
+    _event = faudio[ev_start:ev_end]*amp*window
     # Add event to the left channel
-    buffers[buf,ev_time:ev_time+ev_length] = buffers[buf,ev_time:ev_time+ev_length]+(faudio[ev_start:ev_end]*amp*(1-pan)*window)
+    buffers[buf,ev_time:ev_time+ev_length] = buffers[buf,ev_time:ev_time+ev_length]+(_event*(1-pan))
     # Add event to the right channel
-    buffers[buf+tracks,ev_time:ev_time+ev_length] = buffers[buf+tracks,ev_time:ev_time+ev_length]+(faudio[ev_start:ev_end]*amp*pan*window)
+    buffers[buf+tracks,ev_time:ev_time+ev_length] = buffers[buf+tracks,ev_time:ev_time+ev_length]+(_event*pan)
     # Set the new position for this track
     pos[buf] = ev_time + ev_length
     
@@ -146,7 +148,10 @@ def filltrack(track):
         if np.random.uniform(0.,1.,)<=chance:
             # Add a random event from the track's corresponding group, at the current position, with a random length between grain_min and grain_max,
             # with a random pan position and an amplitude defined partially by the overall structure with some noise
-            add_event(track,pos[track],event_groups[track][np.random.randint(0,len(event_groups[track]))],np.minimum(np.random.randint(grain_min,grain_max),len(faudio)-grain_min),np.random.uniform(0.,0.05)+0.15*structure(pos[track]/sr,structures[tracks]),np.random.uniform(0.,1.))
+            _amp = np.random.uniform(0.,0.05)+0.15*structure(pos[track]/sr,structures[tracks])
+            _start = event_groups[track][np.random.randint(0,len(event_groups[track]))]
+            _length = np.minimum(np.random.randint(grain_min,grain_max),len(faudio)-grain_min)
+            add_event(track,pos[track],_start,_length,_amp,np.random.uniform(0.,1.))
             # Increment the current event count
             _nevents += 1
             # Calculate the chance in the same way specified above
@@ -200,7 +205,8 @@ def select_events(nevents,nfeatures):
     # For each event..
     for i in range(0,nevents):
         # Calculate spectrogram for the event
-        mags = abs(rfft(faudio[events[i]:min(events[i]+grain_mid,len(faudio))]*sig.hann(grain_mid),fftbins))
+        _fftevent = faudio[events[i]:min(events[i]+grain_mid,len(faudio))]*sig.hann(grain_mid)
+        mags = abs(rfft(_fftevent,fftbins))
         mags = 20*log10(mags) # dB
         mags -= max(mags) # normalise to 0dB max
         # Calculate each feature for this event
