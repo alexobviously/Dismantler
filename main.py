@@ -72,15 +72,20 @@ def add_event(buf, ev_time, ev_start, ev_length, amp=0.5, pan=0.5):
         buffers = np.concatenate((buffers,np.zeros((tracks*2,(ev_time+ev_length)-length_sam))),axis=1)
         length_sam = ev_time+ev_length
     # Make sure the region of audio taken from the source track doesn't extend past the end of it
-    ev_end = np.minimum(ev_start+ev_length,len(faudio))
+    if ev_start+ev_length>=len(faudio):
+        ev_end = len(faudio) #np.minimum(ev_start+ev_length,len(faudio))
+        ev_end2 = ev_time + (len(faudio)-ev_start)
+    else:
+        ev_end = ev_start + ev_length
+        ev_end2 = ev_time + ev_length
     # Generate a Hanning window
     window = sig.hann(ev_end-ev_start)
     # Generate event
     _event = faudio[ev_start:ev_end]*amp*window
     # Add event to the left channel
-    buffers[buf,ev_time:ev_time+ev_length] = buffers[buf,ev_time:ev_time+ev_length]+(_event*(1-pan))
+    buffers[buf,ev_time:ev_end2] = buffers[buf,ev_time:ev_end2]+(_event*(1-pan))
     # Add event to the right channel
-    buffers[buf+tracks,ev_time:ev_time+ev_length] = buffers[buf+tracks,ev_time:ev_time+ev_length]+(_event*pan)
+    buffers[buf+tracks,ev_time:ev_end2] = buffers[buf+tracks,ev_time:ev_end2]+(_event*pan)
     # Set the new position for this track
     pos[buf] = ev_time + ev_length
     
