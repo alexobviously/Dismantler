@@ -18,10 +18,12 @@ import sys, os, wave, random, struct
 import numpy as np
 from scipy.io import wavfile as wav
 import scipy.signal as sig
-from scipy.fftpack import rfft
+from scipy.fftpack import fft, dct
 from scipy import log10
 from scipy.cluster.vq import kmeans2 as kmeans
 import matplotlib.pyplot as plt
+import math
+import MFCC
 
 # ---------------
 # User Variables
@@ -29,10 +31,10 @@ import matplotlib.pyplot as plt
 # There are no limits though, so certain
 # values may crash everything!
 # ---------------
-sourceaudio = 'Coalesce_mono.wav' # note: this must be a mono, uncompressed wav file! In theory, any sample rate should work but only 44.1khz has been tested.
+sourceaudio = 'heights.wav' # note: this must be a mono, uncompressed wav file! In theory, any sample rate should work but only 44.1khz has been tested.
 outputfile = 'hello.wav'
-tracks = 4 # This is the number of tracks the event types are split into
-num_events = 40 # This is the total number of events that will be extracted from the source audio
+tracks = 6 # This is the number of tracks the event types are split into
+num_events = 80 # This is the total number of events that will be extracted from the source audio
 length_sec = 180 # The length in seconds of audio you want to generate
 gap_sec = 0.2 # The gap in seconds that will be skipped every time an event isn't generated
 grain_min = 4000 # The minimum length of a generated event (in samples)
@@ -204,21 +206,25 @@ def select_events(nevents,nfeatures):
     print "Selecting %d random audio events.." % nevents
     events = np.random.randint(0,len(faudio)-grain_mid,nevents)
     # Initialise features array with the first variable as index
-    features = np.zeros((nfeatures+1,nevents))
+    features = np.zeros((14,nevents))
     features[0] = np.arange(0,nevents)
     print "Computing audio event spectrograms.."
     # For each event..
     for i in range(0,nevents):
         # Calculate spectrogram for the event
-        _fftevent = faudio[events[i]:min(events[i]+grain_mid,len(faudio))]*sig.hann(grain_mid)
-        mags = abs(rfft(_fftevent,fftbins))
-        mags = 20*log10(mags) # dB
-        mags -= max(mags) # normalise to 0dB max
+        _fftevent = faudio[events[i]:min(events[i]+1000,len(faudio))]*sig.hann(1000)
+        mfcc = MFCC.extract(_fftevent)
+        features[:,i] = np.append(i,mfcc)
+        #powerspec = abs(fft(_fftevent,fftbins)) ** 2
+        #melspec = np.dot(powerspec,melFilterBank(len(_fftevent)))
+        #logspec = np.log(melspec)
+        #mfcc = dct(logspec,type=2)
+        #print mfcc
         # Calculate each feature for this event
-        for j in range(0,nfeatures):
-            features[j+1][i] = abs(np.mean(abs(mags[(feature_bins[j]-featurewidth/2):(feature_bins[j]+featurewidth/2)])))
+        #for j in range(0,nfeatures):
+        #    features[j+1][i] = abs(np.mean(abs(mags[(feature_bins[j]-featurewidth/2):(feature_bins[j]+featurewidth/2)])))
     print "Clustering events with K-Means algorithm.."
-    groups = kmeans(np.transpose(features[1:,:]),tracks,minit='points',iter=30)[1]
+    groups = kmeans(np.transpose(features),tracks,minit='points',iter=30)[1]
     return [events,groups]
 
 # ---------------
