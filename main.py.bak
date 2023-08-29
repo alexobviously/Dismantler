@@ -5,8 +5,7 @@
 # by Alex Baker
 # iamalexbaker@gmail.com
 # The University of Huddersfield
-# Original: 02/02/14
-# Updated:  29/08/23
+# Modfied: 02/02/14
 #
 # Cuts out randomly selected events from a
 # source audio file and groups them according
@@ -20,7 +19,7 @@ import numpy as np
 from scipy.io import wavfile as wav
 import scipy.signal as sig
 from scipy.fftpack import rfft
-from numpy.lib.scimath import log10
+from scipy import log10
 from scipy.cluster.vq import kmeans2 as kmeans
 import matplotlib.pyplot as plt
 
@@ -30,7 +29,7 @@ import matplotlib.pyplot as plt
 # There are no limits though, so certain
 # values may crash everything!
 # ---------------
-sourceaudio = 'examples/Coalesce_mono.wav' # note: this must be a mono, uncompressed wav file! In theory, any sample rate should work but only 44.1khz has been tested.
+sourceaudio = 'Coalesce_mono.wav' # note: this must be a mono, uncompressed wav file! In theory, any sample rate should work but only 44.1khz has been tested.
 outputfile = 'hello.wav'
 tracks = 4 # This is the number of tracks the event types are split into
 num_events = 40 # This is the total number of events that will be extracted from the source audio
@@ -44,15 +43,14 @@ num_features = 30 # Number of features to use for clustering - in theory, a high
 # ---------------
 
 # Open wav
-print(("Opening "+sourceaudio+".."))
+print("Opening "+sourceaudio+"..")
 ifile = wave.open(sourceaudio,'r')
 iaudio = ifile.readframes(-1)
-iaudio = np.frombuffer(iaudio, np.int16)
-# iaudio = np.fromstring(iaudio, np.int16)
+iaudio = np.fromstring(iaudio, 'Int16')
 sr = ifile.getframerate()
 ifile.close()
 numsamples = len(iaudio)
-faudio = iaudio.astype(np.float16)/32767.
+faudio = iaudio.astype('Float16')/32767.
 
 # Variables
 
@@ -69,9 +67,6 @@ grain_mid = (grain_max-grain_min)/2
 # ---------------
 def add_event(buf, ev_time, ev_start, ev_length, amp=0.5, pan=0.5):
     global buffers, length_sam, pos
-    ev_time=int(ev_time)
-    ev_start=int(ev_start)
-    ev_length=int(ev_length)
     # If the event extends past the specified end time, extend all buffers to match it
     if ev_time+ev_length>length_sam:
         buffers = np.concatenate((buffers,np.zeros((tracks*2,(ev_time+ev_length)-length_sam))),axis=1)
@@ -84,7 +79,7 @@ def add_event(buf, ev_time, ev_start, ev_length, amp=0.5, pan=0.5):
         ev_end = ev_start + ev_length
         ev_end2 = ev_time + ev_length
     # Generate a Hanning window
-    window = sig.windows.hann(int(ev_end-ev_start))
+    window = sig.hann(ev_end-ev_start)
     # Generate event
     _event = faudio[ev_start:ev_end]*amp*window
     # Add event to the left channel
@@ -101,7 +96,7 @@ def add_event(buf, ev_time, ev_start, ev_length, amp=0.5, pan=0.5):
 # ---------------
 def normalise(stereo):
     peak = np.amax(stereo)
-    print(("Peak level is %.4f, normalising to %.2f.." % (peak,norm_level)))
+    print("Peak level is %.4f, normalising to %.2f.." % (peak,norm_level))
     return [stereo[0]*(norm_level/peak),stereo[1]*(norm_level/peak)]
         
 # ---------------
@@ -116,7 +111,7 @@ def mixdown():
     right = np.sum(buffers[tracks:tracks*2],0)
     [left_n, right_n] = normalise([left,right])
     # Convert to 16 bit integer format
-    mix = [(left_n*32767).astype(np.int16),(right_n*32767).astype(np.int16)]
+    mix = [(left_n*32767).astype('Int16'),(right_n*32767).astype('Int16')]
     # Transpose the matrix (I work with it oriented the other way around)
     return np.transpose(mix)
 
@@ -132,8 +127,8 @@ def export_tracks(_plot):
         # Normalise left and right
         [left_n, right_n] = normalise([buffers[i],buffers[i+tracks]])
         # Convert to integer and transpose
-        tr = np.transpose([(left_n*32767).astype(np.int16),(right_n*32767).astype(np.int16)])
-        print(("Exporting track %d.." % (i+1)))
+        tr = np.transpose([(left_n*32767).astype('Int16'),(right_n*32767).astype('Int16')])
+        print("Exporting track %d.." % (i+1))
         # Write the au8dio file
         wav.write('track_%d.wav'%(i+1),44100,tr)
         # Optional functionality that creates a plot of each track as it is exported
@@ -168,7 +163,7 @@ def filltrack(track):
             chance = density_max*((structure(pos[track]/sr,structures[track])+structure(pos[track]/sr,structures[tracks]))/2)
         # Increment the current position by the gap variable specified by the user
         pos[track] += gap_sam
-    print("Added %d events" % _nevents)
+    print "Added %d events" % _nevents
           
 # ---------------
 # plot_audio
@@ -204,25 +199,25 @@ def select_events(nevents,nfeatures):
     global groups
     fftbins = 8192
     featurewidth = 16
-    print("Selecting %d random spectral features.." % nfeatures)
+    print "Selecting %d random spectral features.." % nfeatures
     feature_bins = np.random.randint(featurewidth/2,(fftbins/8),nfeatures)
-    print("Selecting %d random audio events.." % nevents)
+    print "Selecting %d random audio events.." % nevents
     events = np.random.randint(0,len(faudio)-grain_mid,nevents)
     # Initialise features array with the first variable as index
     features = np.zeros((nfeatures+1,nevents))
     features[0] = np.arange(0,nevents)
-    print("Computing audio event spectrograms..")
+    print "Computing audio event spectrograms.."
     # For each event..
     for i in range(0,nevents):
         # Calculate spectrogram for the event
-        _fftevent = faudio[events[i]:round(min(events[i]+grain_mid,len(faudio)))] * sig.windows.hann(int(grain_mid))
+        _fftevent = faudio[events[i]:min(events[i]+grain_mid,len(faudio))]*sig.hann(grain_mid)
         mags = abs(rfft(_fftevent,fftbins))
         mags = 20*log10(mags) # dB
         mags -= max(mags) # normalise to 0dB max
         # Calculate each feature for this event
         for j in range(0,nfeatures):
-            features[j+1][i] = abs(np.mean(abs(mags[int(feature_bins[j]-featurewidth/2):int(feature_bins[j]+featurewidth/2)])))
-    print("Clustering events with K-Means algorithm..")
+            features[j+1][i] = abs(np.mean(abs(mags[(feature_bins[j]-featurewidth/2):(feature_bins[j]+featurewidth/2)])))
+    print "Clustering events with K-Means algorithm.."
     groups = kmeans(np.transpose(features[1:,:]),tracks,minit='points',iter=30)[1]
     return [events,groups]
 
@@ -265,7 +260,7 @@ if plot_structure_example:
 
 # Fill each track
 for i in range(0,tracks):
-    print("Generating track %d (%d distinct audio events).." % ((i+1),len(event_groups[i])))
+    print "Generating track %d (%d distinct audio events).." % ((i+1),len(event_groups[i]))
     filltrack(i)
 
 # Turn this on to export each track (as track_x.wav)
@@ -274,9 +269,9 @@ if export_individual_tracks:
     export_tracks(False);
 data = 0.
 data = mixdown()
-print("Exporting to %s.." % outputfile)
+print "Exporting to %s.." % outputfile
 wav.write(outputfile,44100,data)
-print("Done! Enjoy :)")
+print "Done! Enjoy :)"
 
 # Turn this on the plot the source audio with events from each track shown by lines
 # (this will crash with more than 7 tracks because it will run out of colours)
